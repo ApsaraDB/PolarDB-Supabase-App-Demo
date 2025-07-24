@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { generateMeetingSummary, streamMeetingSummary } from "@/lib/dify"
 
 interface MeetingSummaryModalProps {
   open: boolean
