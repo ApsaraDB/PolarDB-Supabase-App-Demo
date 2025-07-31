@@ -8,6 +8,8 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
+import { generateMeetingSummary } from "@/lib/ai-service"
+
 interface MeetingSummaryModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -27,10 +29,9 @@ export function MeetingSummaryModal({
 }: MeetingSummaryModalProps) {
   const [summary, setSummary] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [streamingText, setStreamingText] = useState("")
 
-  // 生成会议纪要（一次性返回）
+
+  // 生成会议纪要
   const handleGenerateSummary = async () => {
     if (!meetingContent.trim()) {
       onSuccess?.("会议内容为空，无法生成纪要")
@@ -41,7 +42,13 @@ export function MeetingSummaryModal({
     setSummary("")
 
     try {
-      const response = await generateMeetingSummary(meetingTitle, meetingContent, currentUserId)
+      const response = await generateMeetingSummary(
+        meetingTitle, 
+        meetingContent, 
+        currentUserId,
+        'tongyi'
+      )
+
       setSummary(response.answer)
       onSuccess?.("会议纪要生成成功！")
     } catch (error) {
@@ -52,47 +59,19 @@ export function MeetingSummaryModal({
     }
   }
 
-  // 流式生成会议纪要
-  const handleStreamSummary = async () => {
-    if (!meetingContent.trim()) {
-      onSuccess?.("会议内容为空，无法生成纪要")
-      return
-    }
-
-    setIsStreaming(true)
-    setStreamingText("")
-    setSummary("")
-
-    try {
-      const fullText = await streamMeetingSummary(meetingTitle, meetingContent, currentUserId, (chunk) => {
-        setStreamingText((prev) => prev + chunk)
-      })
-      setSummary(fullText)
-      onSuccess?.("会议纪要生成完成！")
-    } catch (error) {
-      console.error("Error streaming summary:", error)
-      onSuccess?.("生成会议纪要失败，请重试")
-    } finally {
-      setIsStreaming(false)
-      setStreamingText("")
-    }
-  }
-
   // 复制纪要内容
   const handleCopySummary = () => {
-    const content = summary || streamingText
-    if (content) {
-      navigator.clipboard.writeText(content)
+    if (summary) {
+      navigator.clipboard.writeText(summary)
       onSuccess?.("会议纪要已复制到剪贴板")
     }
   }
 
   // 下载纪要为 Markdown 文件
   const handleDownloadSummary = () => {
-    const content = summary || streamingText
-    if (!content) return
+    if (!summary) return
 
-    const blob = new Blob([content], { type: "text/markdown" })
+    const blob = new Blob([summary], { type: "text/markdown" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -104,8 +83,7 @@ export function MeetingSummaryModal({
     onSuccess?.("会议纪要文件下载成功！")
   }
 
-  const displayContent = summary || streamingText
-  const hasContent = displayContent.trim().length > 0
+  const hasContent = summary.trim().length > 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -119,42 +97,38 @@ export function MeetingSummaryModal({
 
         <div className="flex-1 overflow-hidden flex flex-col">
           {/* 操作区域 */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                {meetingTitle}
-              </Badge>
-              <Badge variant="secondary" className="text-xs">
-                {meetingContent.length} 字符
-              </Badge>
+          <div className="space-y-4 mb-4">
+            {/* 基本信息 */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs">
+                  {meetingTitle}
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {meetingContent.length} 字符
+                </Badge>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button onClick={handleGenerateSummary} disabled={isGenerating} size="sm">
+                  {isGenerating ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <FileText className="h-4 w-4 mr-2" />
+                  )}
+                  {isGenerating ? "生成中..." : "生成纪要"}
+                </Button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button onClick={handleGenerateSummary} disabled={isGenerating || isStreaming} size="sm">
-                {isGenerating ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <FileText className="h-4 w-4 mr-2" />
-                )}
-                {isGenerating ? "生成中..." : "生成纪要"}
-              </Button>
 
-              <Button onClick={handleStreamSummary} disabled={isGenerating || isStreaming} variant="outline" size="sm">
-                {isStreaming ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Sparkles className="h-4 w-4 mr-2" />
-                )}
-                {isStreaming ? "生成中..." : "流式生成"}
-              </Button>
-            </div>
           </div>
 
           <Separator className="mb-4" />
 
           {/* 内容显示区域 */}
           <div className="flex-1 overflow-y-auto">
-            {!hasContent && !isGenerating && !isStreaming && (
+            {!hasContent && !isGenerating && (
               <Card className="p-8 text-center">
                 <Sparkles className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-600 mb-2">智能会议纪要生成</h3>
@@ -167,32 +141,22 @@ export function MeetingSummaryModal({
               </Card>
             )}
 
-            {(isGenerating || isStreaming) && (
+            {isGenerating && (
               <Card className="p-6">
                 <div className="flex items-center justify-center">
                   <Loader2 className="h-6 w-6 animate-spin mr-3" />
-                  <span className="text-gray-600">
-                    {isStreaming ? "AI 正在实时生成会议纪要..." : "AI 正在分析会议内容..."}
-                  </span>
+                  <span className="text-gray-600">AI 正在分析会议内容...</span>
                 </div>
-                {isStreaming && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                    <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono">
-                      {streamingText}
-                      <span className="animate-pulse">|</span>
-                    </pre>
-                  </div>
-                )}
               </Card>
             )}
 
-            {hasContent && !isStreaming && (
+            {hasContent && (
               <Card className="p-6">
                 <div className="prose prose-sm max-w-none">
                   <div
                     className="text-gray-700 leading-relaxed whitespace-pre-wrap"
                     dangerouslySetInnerHTML={{
-                      __html: displayContent.replace(/\n/g, "<br>").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>"),
+                      __html: summary.replace(/\n/g, "<br>").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>"),
                     }}
                   />
                 </div>

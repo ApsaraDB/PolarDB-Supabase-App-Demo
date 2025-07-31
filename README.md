@@ -30,6 +30,7 @@ cp .env.example .env.local
 ```
 
 ```env
+# Supabase 配置
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
@@ -43,20 +44,68 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    -- 执行 scripts/01-create-tables.sql
    ```
 
+### 3. AI服务配置
 
-### 3. Supabase Storage 配置
+#### 3.1 创建Supabase Edge Function
+
+在Supabase项目中创建Edge Function来调用通义千问API，在Supabase控制台进入Edge Functions，点击 Deploy a new function -> Via Editor，在代码编辑器中粘贴下面代码，注意代码中要填入您的通义大模型apiKey，Function name 填写tongyi，然后点击 Deploy function。
+
+```typescript
+// Setup type definitions for built-in Supabase Runtime APIs
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { OpenAI } from "npm:openai@4.8.0";
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Content-Type': 'application/json,charset=utf-8'
+};
+const openai = new OpenAI({
+  apiKey: "your api key",
+  baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+});
+Deno.serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  const { prompt } = await req.json();
+  const response = await openai.chat.completions.create({
+    model: "qwen-turbo",
+    messages: [
+      {
+        role: "system",
+        content: "你是一个专业的会议纪要助手，能够根据会议内容生成结构化的会议纪要。"
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ]
+  });
+  return new Response(JSON.stringify({
+    answer: response.choices[0].message.content
+  }), {
+    headers: corsHeaders
+  });
+});
+```
+
+### 4. Supabase Storage 配置
 
 1. 在 Supabase 控制台中创建名为 `meeting-files` 的存储桶
 2. 设置存储桶为私有（推荐）或公开
 3. 确保已执行上述存储策略脚本
 
-### 4. 安装依赖
+### 5. 安装依赖
 
 ```bash
 pnpm install
 ```
 
-### 5. 启动开发服务器
+### 6. 启动开发服务器
 
 ```bash
 pnpm dev
@@ -90,6 +139,12 @@ pnpm dev
 - 实时显示在线用户和打字状态
 - 支持标签管理和任务分配
 - 活动动态实时更新
+
+### AI会议纪要
+
+1. 在会议页面点击"生成会议纪要"按钮
+2. AI将自动分析会议内容并生成结构化纪要
+3. 生成的纪要可以复制或下载为Markdown文件
 
 ## 项目结构
 
